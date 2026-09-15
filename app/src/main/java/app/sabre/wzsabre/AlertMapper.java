@@ -154,19 +154,25 @@ public class AlertMapper {
 
     /**
      * The SABRE {@code type} to send for a Waze alert so it actually renders in
-     * Highway Radar. HR 3.2 only draws a crowd alert whose type starts with POLICE,
-     * HAZARD, or ACCIDENT and silently drops the rest, including the very common
-     * JAM_* (traffic) and ROAD_CLOSED. So the raw Waze subtype is passed through when
-     * it already starts with one of those (keeps the most specific HR icon); otherwise
-     * it is remapped via {@link #fromWazeType} so jams/closures become
-     * HAZARD_ON_ROAD_CONGESTION instead of vanishing. Returns null if there is no
-     * usable type.
+     * Highway Radar. Police alerts are always normalized to HR's canonical
+     * POLICE_VISIBLE/POLICE_HIDDEN values because Waze RT subtypes such as
+     * POLICE_HIDING and POLICE_WITH_MOBILE_CAMERA are not guaranteed renderer
+     * constants. Other already-renderable HAZARD/ACCIDENT subtypes pass through.
      */
     public static String wazeRenderableType(String type, String subtype) {
         String raw = (subtype != null && !subtype.isEmpty()) ? subtype : type;
         if (raw == null || raw.isEmpty()) return null;
+        String top = type != null ? type.toUpperCase(Locale.US) : "";
         String u = raw.toUpperCase(Locale.US);
-        if (u.startsWith("POLICE") || u.startsWith("HAZARD") || u.startsWith("ACCIDENT")) return raw;
+
+        // Normalize every enforcement variant before the generic prefix pass-through.
+        // This is especially important for POLICE_HIDING and mobile-camera subtypes.
+        if (top.equals("POLICE") || top.equals("CAMERA") || u.startsWith("POLICE") || u.contains("CAMERA")) {
+            String mapped = fromWazeType(top.equals("CAMERA") ? "CAMERA" : "POLICE", subtype);
+            return mapped != null ? mapped : "POLICE_VISIBLE";
+        }
+
+        if (u.startsWith("HAZARD") || u.startsWith("ACCIDENT")) return raw;
         String mapped = fromWazeType(type, subtype);
         return mapped != null ? mapped : raw;
     }
